@@ -125,25 +125,24 @@ bool can_is_rx_pending(can_data_t *hcan)
 	return ((can->RF0R & CAN_RF0R_FMP0) != 0);
 }
 
-/*
-bool can_receive(can_data_t *hcan, struct gs_host_frame *rx_frame)
+bool can_receive(can_data_t *hcan, can_msg_t *rx_frame)
 {
 	CAN_TypeDef *can = hcan->instance;
 
 	if (can_is_rx_pending(hcan)) {
 		CAN_FIFOMailBox_TypeDef *fifo = &can->sFIFOMailBox[0];
 
-		if (fifo->RIR &  CAN_RI0R_IDE) {
-			rx_frame->can_id =  CAN_EFF_FLAG | ((fifo->RIR >> 3) & 0x1FFFFFFF);
+		if (fifo->RIR & CAN_RI0R_IDE) {
+			rx_frame->id =  0x80000000 | ((fifo->RIR >> 3) & 0x1FFFFFFF);
 		} else {
-			rx_frame->can_id = (fifo->RIR >> 21) & 0x7FF;
+			rx_frame->id = (fifo->RIR >> 21) & 0x7FF;
 		}
 
 		if (fifo->RIR & CAN_RI0R_RTR)  {
-			rx_frame->can_id |= CAN_RTR_FLAG;
+			rx_frame->id |= 0x40000000;
 		}
 
-		rx_frame->can_dlc = fifo->RDTR & CAN_RDT0R_DLC;
+		rx_frame->dlc = fifo->RDTR & CAN_RDT0R_DLC;
 
 		rx_frame->data[0] = (fifo->RDLR >>  0) & 0xFF;
 		rx_frame->data[1] = (fifo->RDLR >>  8) & 0xFF;
@@ -164,7 +163,7 @@ bool can_receive(can_data_t *hcan, struct gs_host_frame *rx_frame)
 
 	}
 }
-*/
+
 static CAN_TxMailBox_TypeDef *can_find_free_mailbox(can_data_t *hcan)
 {
 	CAN_TypeDef *can = hcan->instance;

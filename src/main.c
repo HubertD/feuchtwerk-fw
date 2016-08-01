@@ -38,6 +38,7 @@
 
 #include "can.h"
 #include "hdc1080.h"
+#include "ssd1306.h"
 
 /* USER CODE END Includes */
 
@@ -67,6 +68,7 @@ static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART1_UART_Init(void);
 
+
 int main(void)
 {
 	can_data_t can0;
@@ -77,7 +79,7 @@ int main(void)
 	SystemClock_Config();
 
 	MX_GPIO_Init();
-	//MX_ADC_Init();
+	MX_ADC_Init();
 	//MX_CAN_Init();
 	MX_I2C1_Init();
 	//MX_SPI1_Init();
@@ -96,29 +98,71 @@ int main(void)
 	uint32_t can_id_base = 0x80200000 | (data0 << 12);
 
 	msg_01.id = can_id_base + 1;
-	msg_01.dlc = 5;
+	msg_01.dlc = 7;
 	memset(msg_01.data, 0, sizeof(msg_01.data));
 
+	GPIO_InitTypeDef gpioInit;
+	__ADC1_CLK_ENABLE();
+	gpioInit.Pin = GPIO_PIN_0;
+	gpioInit.Mode = GPIO_MODE_ANALOG;
+	gpioInit.Pull = GPIO_NOPULL;
+	HAL_GPIO_Init(GPIOA, &gpioInit);
+
+
+	ssd1306_init(&hi2c1);
+
+	can_msg_t rxmsg;
+
+	uint32_t t_measure = 0;
 	while (1)
 	{
-		HAL_GPIO_WritePin(GPIOB, LED1_Pin|LED2_Pin, GPIO_PIN_RESET);
-		msg_01.data[0] = 0;
-		if (hdc1080_make_measurement(&hi2c1, HDC1080_REG_TEMPERATURE, &value)) {
-			msg_01.data[0] |= 0x01;
-			msg_01.data[1] = (value>>8) & 0xFF;
-			msg_01.data[2] = (value>>0) & 0xFF;
+		if (HAL_GetTick() >= t_measure) {
+			t_measure += 2000;
+
+			HAL_GPIO_WritePin(GPIOB, LED1_Pin|LED2_Pin, GPIO_PIN_RESET);
+			msg_01.data[0] = 0;
+			if (hdc1080_make_measurement(&hi2c1, HDC1080_REG_TEMPERATURE, &value)) {
+				msg_01.data[0] |= 0x01;
+				msg_01.data[1] = (value>>8) & 0xFF;
+				msg_01.data[2] = (value>>0) & 0xFF;
+			}
+
+			if (hdc1080_make_measurement(&hi2c1, HDC1080_REG_HUMIDITY, &value)) {
+				msg_01.data[0] |= 0x02;
+				msg_01.data[3] = (value>>8) & 0xFF;
+				msg_01.data[4] = (value>>0) & 0xFF;
+			}
+
+			HAL_ADC_Start(&hadc);
+			if (HAL_ADC_PollForConversion(&hadc, 1000) == HAL_OK) {
+				value = HAL_ADC_GetValue(&hadc);
+				msg_01.data[0] |= 0x04;
+				msg_01.data[5] = (value>>0) & 0xFF;
+				msg_01.data[6] = (value>>8) & 0xFF;
+			}
+
+			HAL_GPIO_WritePin(GPIOB, LED1_Pin|LED2_Pin, GPIO_PIN_SET);
+
+			can_send(&can0, &msg_01);
 		}
 
-		if (hdc1080_make_measurement(&hi2c1, HDC1080_REG_HUMIDITY, &value)) {
-			msg_01.data[0] |= 0x02;
-			msg_01.data[3] = (value>>8) & 0xFF;
-			msg_01.data[4] = (value>>0) & 0xFF;
+		while (can_receive(&can0, &rxmsg)) {
+
+			if ((rxmsg.id & 0xFFFFFF00) == 0x80301100) { // set pixels
+				uint16_t pos = 64*(rxmsg.id & 0xFF);
+				for (int i=0; i<rxmsg.dlc; i++) {
+					for (int j=0; j<8; j++) {
+						ssd1306_set_pixel(&hi2c1, pos%128, pos/128, (rxmsg.data[i] & (1<<j)) != 0);
+						pos++;
+					}
+				}
+			}
+
+			if ((rxmsg.id == 0x80301001)) { // flush
+				ssd1306_update(&hi2c1);
+			}
 		}
-		HAL_GPIO_WritePin(GPIOB, LED1_Pin|LED2_Pin, GPIO_PIN_SET);
 
-		can_send(&can0, &msg_01);
-
-		HAL_Delay(1475);
 	}
 
 }

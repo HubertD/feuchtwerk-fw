@@ -54,8 +54,8 @@ bool can_is_enabled(can_data_t *hcan);
 bool can_is_rx_pending(can_data_t *hcan);
 bool can_send(can_data_t *hcan, can_msg_t *frame);
 
+bool can_receive(can_data_t *hcan, can_msg_t *rx_frame);
 /*
-bool can_receive(can_data_t *hcan, struct gs_host_frame *rx_frame);
 uint32_t can_get_error_status(can_data_t *hcan);
 bool can_parse_error_status(uint32_t err, struct gs_host_frame *frame);
 */
